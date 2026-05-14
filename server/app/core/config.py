@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "Data Lens API"
-    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/data_lens"
+    database_url: str = "postgresql+psycopg://postgres:1234@localhost:5432/data_lens"
     jwt_secret_key: str = "change-this-secret-key"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60

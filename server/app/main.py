@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, users
+from app.api.routes import auth, files, users
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import engine
@@ -30,6 +30,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(files.router, prefix="/api/files", tags=["Files"])
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 
 

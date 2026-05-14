@@ -24,7 +24,7 @@ export function LogoutButton() {
       type="button"
       onClick={handleLogout}
       disabled={isPending}
-      className="h-10 border border-black/15 px-4 font-mono text-xs uppercase tracking-[0.16em] text-ink hover:border-ink hover:bg-ink hover:text-paper disabled:cursor-not-allowed disabled:opacity-60"
+      className="h-10 w-full rounded-lg border border-[#efc2c4] bg-[#fdebec] px-4 text-sm font-semibold text-[#9f2f2d] hover:border-[#9f2f2d] hover:bg-[#9f2f2d] hover:text-[#fff7f7] disabled:cursor-not-allowed disabled:opacity-60"
     >
       {isPending ? "Leaving" : "Logout"}
     </button>

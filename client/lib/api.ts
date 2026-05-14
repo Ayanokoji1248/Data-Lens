@@ -45,3 +45,23 @@ export async function authRequest<T>(
 
   return payload as T;
 }
+
+export async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
+  const response = await fetch(`${getApiUrl()}${path}`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const message =
+      payload && typeof payload.detail === "string"
+        ? payload.detail
+        : "Upload failed. Please try again.";
+    throw new Error(message);
+  }
+
+  return payload as T;
+}

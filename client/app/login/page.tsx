@@ -6,13 +6,13 @@ import { AuthShell } from "@/components/AuthShell";
 export default function LoginPage() {
   return (
     <AuthShell
-      eyebrow="Secure workspace"
-      title="Read the room before the room changes."
-      copy="Sign in to continue into your protected Data Lens dashboard."
+      eyebrow="KnowYourSheet"
+      title="Talk to your spreadsheets like they understand you."
+      copy="Upload Excel, CSV, or Sheets and discover insights instantly."
       footer={
         <>
-          New here?{" "}
-          <Link href="/register" className="font-semibold text-ink underline underline-offset-4">
+          New to KnowYourSheet?{" "}
+          <Link href="/register" className="font-semibold text-[#1f2937] hover:text-[#6f6254]">
             Create an account
           </Link>
         </>

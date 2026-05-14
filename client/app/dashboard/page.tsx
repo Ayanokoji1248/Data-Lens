@@ -1,121 +1,61 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-
-import { LogoutButton } from "@/components/LogoutButton";
-import { API_URL, type ApiUser } from "@/lib/api";
-
-async function getCurrentUser(): Promise<ApiUser | null> {
-  const cookieHeader = (await cookies()).toString();
-
-  let response: Response;
-
-  try {
-    response = await fetch(`${API_URL}/api/users/me`, {
-      headers: {
-        cookie: cookieHeader,
-      },
-      cache: "no-store",
-    });
-  } catch {
-    return null;
-  }
-
-  if (!response.ok) {
-    return null;
-  }
-
-  return response.json();
-}
+import { UploadFileCard } from "@/components/dashboard/UploadFileCard";
+import { requireCurrentUser } from "@/lib/server-auth";
 
 export default async function DashboardPage() {
-  const user = await getCurrentUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const joined = new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(user.created_at));
+  const user = await requireCurrentUser();
+  const firstName = user.fullName?.split(" ")[0] || "there";
 
   return (
-    <main className="min-h-screen bg-[#f6f3ec] px-5 py-6 text-ink sm:px-8 lg:px-10">
-      <section className="mx-auto min-h-[calc(100vh-3rem)] max-w-6xl border border-black/10 bg-paper shadow-[0_30px_80px_rgba(33,29,20,0.14)]">
-        <header className="flex flex-col gap-5 border-b border-black/10 px-6 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-10">
+    <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#7c6f5b]">
+          Dashboard
+        </p>
+        <h1 className="mt-3 font-serif text-4xl font-semibold leading-tight tracking-[-0.04em] text-[#171717] sm:text-5xl">
+          Good evening, {firstName}.
+        </h1>
+        <p className="mt-4 max-w-2xl text-base leading-7 text-[#62584e]">
+          Upload a spreadsheet and ask questions about revenue, quality, missing values, trends,
+          and summaries in one workspace.
+        </p>
+
+        <div className="mt-8 rounded-xl border border-[#ded7cc] bg-[#fffdf8]/92 p-4 shadow-[0_18px_50px_rgba(65,50,35,0.05)] sm:p-6">
           <div>
-            <p className="font-mono text-xs uppercase tracking-[0.28em] text-copper">
-              Data Lens
+            <h2 className="text-xl font-semibold tracking-[-0.02em] text-[#1f2937]">
+              Upload a file
+            </h2>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-[#6b6259]">
+              Drop an Excel or CSV file here. KnowYourSheet will prepare it for chat, summaries,
+              and validation checks.
             </p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Dashboard
-            </h1>
           </div>
-          <LogoutButton />
-        </header>
 
-        <div className="grid gap-0 lg:grid-cols-[0.9fr_1.1fr]">
-          <aside className="border-b border-black/10 p-6 lg:border-b-0 lg:border-r lg:p-10">
-            <div className="bg-[#151511] p-7 text-[#fff7e8]">
-              <p className="font-mono text-xs uppercase tracking-[0.24em] text-[#f2b56b]">
-                Active user
-              </p>
-              <h2 className="mt-5 text-4xl font-semibold leading-tight">{user.fullName}</h2>
-              <p className="mt-3 text-[#d9d2c3]">{user.email}</p>
-              <div className="mt-8 grid grid-cols-2 gap-px bg-white/10">
-                <div className="bg-[#151511] p-4">
-                  <div className="font-mono text-xs uppercase tracking-[0.18em] text-[#b9b09f]">
-                    Role
-                  </div>
-                  <div className="mt-2 text-lg">{user.role || "Member"}</div>
-                </div>
-                <div className="bg-[#151511] p-4">
-                  <div className="font-mono text-xs uppercase tracking-[0.18em] text-[#b9b09f]">
-                    Joined
-                  </div>
-                  <div className="mt-2 text-lg">{joined}</div>
-                </div>
-              </div>
-            </div>
-          </aside>
-
-          <section className="p-6 lg:p-10">
-            <div className="grid gap-4 sm:grid-cols-3">
-              {[
-                ["Protected", "route state"],
-                ["Cookie", "auth mode"],
-                ["Postgres", "user store"],
-              ].map(([value, label]) => (
-                <div key={label} className="border border-black/10 bg-white p-5">
-                  <div className="text-2xl font-semibold">{value}</div>
-                  <div className="mt-2 font-mono text-xs uppercase tracking-[0.18em] text-black/45">
-                    {label}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-6 border border-black/10 bg-white p-6">
-              <p className="font-mono text-xs uppercase tracking-[0.24em] text-fern">
-                Protected payload
-              </p>
-              <pre className="mt-5 overflow-x-auto bg-[#151511] p-5 text-sm leading-7 text-[#fff7e8]">
-                {JSON.stringify(
-                  {
-                    id: user.id,
-                    fullName: user.fullName,
-                    email: user.email,
-                    role: user.role,
-                  },
-                  null,
-                  2,
-                )}
-              </pre>
-            </div>
-          </section>
+          <UploadFileCard />
         </div>
-      </section>
-    </main>
+      </div>
+
+      <aside className="space-y-4">
+        <section className="rounded-xl border border-[#ded7cc] bg-[#fffdf8]/92 p-5 shadow-[0_18px_50px_rgba(65,50,35,0.04)]">
+          <h2 className="text-sm font-semibold text-[#1f2937]">Workspace status</h2>
+          <p className="mt-3 text-sm leading-6 text-[#62584e]">
+            Upload your first spreadsheet to generate summaries, file status, and AI-ready
+            context.
+          </p>
+        </section>
+
+        <section className="rounded-xl border border-[#ded7cc] bg-[#fffdf8]/92 p-5 shadow-[0_18px_50px_rgba(65,50,35,0.04)]">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-[#1f2937]">Recent files</h2>
+            <span className="text-xs text-[#78716c]">0 files</span>
+          </div>
+          <div className="mt-4 rounded-lg border border-dashed border-[#d9d0c4] bg-[#fbfaf7] p-4">
+            <p className="text-sm font-medium text-[#292524]">No files uploaded yet.</p>
+            <p className="mt-1 text-sm leading-6 text-[#78716c]">
+              Recent workbooks will appear here after upload.
+            </p>
+          </div>
+        </section>
+      </aside>
+    </section>
   );
 }
