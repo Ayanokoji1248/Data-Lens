@@ -40,3 +40,25 @@ class FileUploadResponse(BaseModel):
     user_id: int = Field(alias="userId")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class FilePreviewResponse(BaseModel):
+    file: UploadedFileRead
+    columns: list[dict[str, Any]]
+    rows: list[dict[str, Any]]
+    limit: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FileQueryRequest(BaseModel):
+    query: str
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class FileQueryResponse(BaseModel):
+    columns: list[str]
+    rows: list[dict[str, Any]]
+    limit: int
+
+    model_config = ConfigDict(populate_by_name=True)

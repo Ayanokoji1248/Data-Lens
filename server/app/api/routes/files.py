@@ -8,9 +8,15 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.uploaded_file import UploadedFile
-from app.schemas.uploaded_file import FileUploadResponse, UploadedFileRead
+from app.schemas.uploaded_file import (
+    FilePreviewResponse,
+    FileQueryRequest,
+    FileQueryResponse,
+    FileUploadResponse,
+    UploadedFileRead,
+)
 from app.services.auth_service import get_current_user
-from app.services.duckdb_service import drop_table_by_name, store_rows
+from app.services.duckdb_service import drop_table_by_name, preview_rows, run_read_query, store_rows
 from app.services.spreadsheet_parser import parse_spreadsheet
 
 router = APIRouter()
@@ -153,3 +159,86 @@ def list_uploaded_csv_files(
         .order_by(UploadedFile.created_at.desc())
         .all()
     )
+
+
+@router.get("/{file_id}/preview", response_model=FilePreviewResponse)
+def preview_uploaded_file(
+    file_id: int,
+    limit: int = 20,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    uploaded_file = db.get(UploadedFile, file_id)
+
+    if uploaded_file is None or uploaded_file.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Uploaded file was not found.",
+        )
+
+    if uploaded_file.status != "ready":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is not ready for preview.",
+        )
+
+    if not uploaded_file.duckdb_table_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file does not have a query table yet.",
+        )
+
+    safe_limit = max(1, min(limit, 100))
+    rows = preview_rows(uploaded_file.duckdb_table_name, safe_limit)
+    columns_metadata = uploaded_file.columns_metadata or {}
+
+    return FilePreviewResponse(
+        file=UploadedFileRead.model_validate(uploaded_file),
+        columns=columns_metadata.get("columns", []),
+        rows=rows,
+        limit=safe_limit,
+    )
+
+
+@router.post("/{file_id}/query", response_model=FileQueryResponse)
+def query_uploaded_file(
+    file_id: int,
+    payload: FileQueryRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    uploaded_file = db.get(UploadedFile, file_id)
+
+    if uploaded_file is None or uploaded_file.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Uploaded file was not found.",
+        )
+
+    if uploaded_file.status != "ready":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is not ready for querying.",
+        )
+
+    if not uploaded_file.duckdb_table_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file does not have a query table yet.",
+        )
+
+    try:
+        rows = run_read_query(uploaded_file.duckdb_table_name, payload.query, payload.limit)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Query failed: {exc}",
+        ) from exc
+
+    columns = list(rows[0].keys()) if rows else []
+    return FileQueryResponse(columns=columns, rows=rows, limit=payload.limit)

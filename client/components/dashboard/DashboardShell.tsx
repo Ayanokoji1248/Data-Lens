@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Bell, Search, Sheet } from "lucide-react";
+import { Sheet } from "lucide-react";
 
 import { LogoutButton } from "@/components/LogoutButton";
 import { DashboardNav } from "@/components/dashboard/DashboardNav";
@@ -25,56 +25,39 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
       <div className="pointer-events-none absolute bottom-[-16rem] left-1/3 h-[30rem] w-[30rem] rounded-full bg-[#eee6d8]/70 blur-3xl" />
       <div className="pointer-events-none absolute inset-0 opacity-[0.24] [background-image:radial-gradient(rgba(31,41,55,.09)_1px,transparent_1px)] [background-size:18px_18px]" />
 
-      <div className="relative grid min-h-screen lg:grid-cols-[248px_minmax(0,1fr)]">
-        <aside className="border-b border-[#e4ded4] bg-[#fbfaf7]/88 px-5 py-5 backdrop-blur-xl lg:border-b-0 lg:border-r lg:px-4">
-          <div className="flex items-center gap-3 px-1">
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#1f2937] text-[#fbfaf7]">
-              <Sheet className="h-[18px] w-[18px]" strokeWidth={2} />
+      <div className="relative min-h-screen lg:pl-[248px]">
+        <aside className="flex flex-col border-b border-[#e4ded4] bg-[#fbfaf7]/88 px-5 py-5 backdrop-blur-xl lg:fixed lg:inset-y-0 lg:left-0 lg:z-20 lg:w-[248px] lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-4">
+          <div>
+            <div className="flex items-center gap-3 px-1">
+              <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#1f2937] text-[#fbfaf7]">
+                <Sheet className="h-[18px] w-[18px]" strokeWidth={2} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold tracking-[-0.01em] text-[#1f2937]">
+                  KnowYourSheet
+                </p>
+                <p className="text-xs text-[#78716c]">Spreadsheet intelligence</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-semibold tracking-[-0.01em] text-[#1f2937]">
-                KnowYourSheet
-              </p>
-              <p className="text-xs text-[#78716c]">Spreadsheet intelligence</p>
-            </div>
+
+            <DashboardNav />
           </div>
 
-          <DashboardNav />
-
-          <div className="mt-8 hidden lg:block">
+          <div className="mt-8 border-t border-[#e4ded4] pt-5 lg:mt-auto">
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-[#ded7cc] bg-[#fffdf8]/88 p-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#1f2937] text-sm font-semibold text-[#fbfaf7]">
+                {initials || "A"}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-[#1f2937]">{user.fullName}</p>
+                <p className="truncate text-xs text-[#78716c]">{user.email}</p>
+              </div>
+            </div>
             <LogoutButton />
           </div>
         </aside>
 
         <section className="min-w-0">
-          <header className="border-b border-[#e4ded4] bg-[#fbfaf7]/82 px-5 py-4 backdrop-blur-xl sm:px-7">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <label className="flex h-11 min-w-0 flex-1 items-center rounded-lg border border-[#ded7cc] bg-[#fffdf8]/88 px-3.5 lg:max-w-xl">
-                <Search className="mr-3 h-4 w-4 text-[#8f8375]" strokeWidth={1.8} />
-                <input
-                  className="min-w-0 flex-1 bg-transparent text-sm font-medium text-[#292524] outline-none placeholder:text-[#9a9186]"
-                  placeholder="Ask your sheet anything..."
-                  aria-label="Ask your sheet anything"
-                />
-              </label>
-
-              <div className="flex items-center justify-between gap-3 lg:justify-end">
-                <button className="h-11 rounded-lg border border-[#ded7cc] bg-[#fffdf8]/88 px-3.5 text-sm font-medium text-[#57534e] hover:border-[#c9beb0] hover:text-[#1f2937]">
-                  Workspace
-                </button>
-                <button
-                  className="grid h-11 w-11 place-items-center rounded-lg border border-[#ded7cc] bg-[#fffdf8]/88 text-[#57534e] hover:border-[#c9beb0] hover:text-[#1f2937]"
-                  aria-label="Notifications"
-                >
-                  <Bell className="h-5 w-5" strokeWidth={1.8} />
-                </button>
-                <div className="grid h-11 w-11 place-items-center rounded-lg bg-[#1f2937] text-sm font-semibold text-[#fbfaf7]">
-                  {initials || "A"}
-                </div>
-              </div>
-            </div>
-          </header>
-
           <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-7 lg:py-10">{children}</div>
         </section>
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { UploadCloud } from "lucide-react";
 
 import { uploadRequest } from "@/lib/api";
@@ -17,6 +18,7 @@ type UploadResponse = {
 };
 
 export function UploadFileCard() {
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
@@ -51,6 +53,7 @@ export function UploadFileCard() {
     try {
       const payload = await uploadRequest<UploadResponse>("/api/files/upload", formData);
       setStatusMessage(`${payload.file.name} is ${payload.file.status}.`);
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed. Please try again.");
     } finally {
