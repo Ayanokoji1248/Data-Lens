@@ -29,6 +29,18 @@ The API will be available at `http://127.0.0.1:8000`.
 - `POST /api/auth/logout`
 - `GET /api/users/me`
 - `GET /api/users/protected`
+- `POST /api/files/upload`
+
+## Development database updates
+
+This project currently uses `Base.metadata.create_all()` instead of migrations. If your local
+`uploaded_files` table already exists from an older version, add the new parsing columns manually
+or recreate the development database:
+
+```sql
+ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS duckdb_table_name VARCHAR(255);
+ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS columns_metadata JSON;
+```
 
 Register request:
 

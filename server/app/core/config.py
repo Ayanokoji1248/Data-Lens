@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     auth_cookie_secure: bool = False
     auth_cookie_samesite: str = "lax"
     cors_origins: str = "http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:3001,http://localhost:3001"
+    upload_dir: str = "uploads"
+    max_upload_size_bytes: int = 10 * 1024 * 1024
+    duckdb_path: str = "data_lens.duckdb"
+    preview_sample_size: int = 10
 
     @property
     def allowed_cors_origins(self) -> list[str]:
