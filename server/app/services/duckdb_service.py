@@ -113,7 +113,7 @@ def preview_rows(table_name: str, limit: int = 20) -> list[dict[str, Any]]:
 def run_read_query(table_name: str, query: str, limit: int = 20) -> list[dict[str, Any]]:
     import duckdb
 
-    safe_query = _validate_read_query(query)
+    safe_query = validate_read_query(query)
     safe_limit = max(1, min(limit, 100))
     duckdb_path = get_duckdb_path()
     if not duckdb_path.exists():
@@ -136,7 +136,7 @@ def _quote_identifier(identifier: str) -> str:
     return f'"{escaped_identifier}"'
 
 
-def _validate_read_query(query: str) -> str:
+def validate_read_query(query: str) -> str:
     safe_query = query.strip().rstrip(";").strip()
     lowered_query = safe_query.lower()
 

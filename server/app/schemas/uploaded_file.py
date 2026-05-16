@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
@@ -62,3 +62,52 @@ class FileQueryResponse(BaseModel):
     limit: int
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class FileChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class FileChatSummary(BaseModel):
+    filename: str
+    sheet_names: list[str] = Field(alias="sheetNames")
+    row_count: int = Field(alias="rowCount")
+    column_count: int = Field(alias="columnCount")
+    columns: list[dict[str, Any]]
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FileChatResponse(BaseModel):
+    answer: str | None = None
+    sql: str | None = None
+    operation: Literal["answer", "sql"]
+    summary: FileChatSummary
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FileReportSection(BaseModel):
+    title: str
+    content: str
+
+
+class FileReportContent(BaseModel):
+    title: str
+    executive_summary: str = Field(alias="executiveSummary")
+    sections: list[FileReportSection]
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FileReportResponse(BaseModel):
+    id: int
+    file_id: int = Field(alias="fileId")
+    status: str
+    report: FileReportContent | None = None
+    model: str | None = None
+    error_message: str | None = Field(default=None, alias="errorMessage")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)

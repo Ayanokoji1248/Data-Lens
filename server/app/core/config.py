@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     max_upload_size_bytes: int = 10 * 1024 * 1024
     duckdb_path: str = "data_lens.duckdb"
     preview_sample_size: int = 10
+    google_gemini_key: str | None = None
+    gemini_model: str = "gemini-3-flash-preview"
 
     @property
     def allowed_cors_origins(self) -> list[str]:

@@ -7,16 +7,22 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.file_report import FileReport
 from app.models.uploaded_file import UploadedFile
 from app.schemas.uploaded_file import (
+    FileChatRequest,
+    FileChatResponse,
     FilePreviewResponse,
     FileQueryRequest,
     FileQueryResponse,
+    FileReportResponse,
     FileUploadResponse,
     UploadedFileRead,
 )
 from app.services.auth_service import get_current_user
+from app.services.ai_query_service import generate_file_chat_response
 from app.services.duckdb_service import drop_table_by_name, preview_rows, run_read_query, store_rows
+from app.services.file_report_service import generate_file_report
 from app.services.spreadsheet_parser import parse_spreadsheet
 
 router = APIRouter()
@@ -200,6 +206,122 @@ def preview_uploaded_file(
     )
 
 
+@router.get("/{file_id}/report", response_model=FileReportResponse | None)
+def get_file_report(
+    file_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    uploaded_file = _get_ready_owned_file(file_id, current_user.id, db, "report")
+    report = _get_report_for_file(uploaded_file.id, current_user.id, db)
+
+    if report is None:
+        return None
+
+    return _serialize_file_report(report)
+
+
+@router.post("/{file_id}/report", response_model=FileReportResponse)
+def generate_uploaded_file_report(
+    file_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    uploaded_file = _get_ready_owned_file(file_id, current_user.id, db, "report")
+    report = _get_report_for_file(uploaded_file.id, current_user.id, db)
+
+    if report and report.status == "ready" and report.report_json:
+        return _serialize_file_report(report)
+
+    if report and report.status == "processing":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A report is already being generated for this file.",
+        )
+
+    if report is None:
+        report = FileReport(
+            file_id=uploaded_file.id,
+            user_id=current_user.id,
+            status="processing",
+            model=settings.gemini_model,
+        )
+        db.add(report)
+    else:
+        report.status = "processing"
+        report.error_message = None
+        report.model = settings.gemini_model
+
+    try:
+        db.commit()
+        db.refresh(report)
+        report.report_json = generate_file_report(uploaded_file)
+        report.status = "ready"
+        report.error_message = None
+        db.commit()
+        db.refresh(report)
+    except Exception as exc:
+        db.rollback()
+        report = _get_report_for_file(uploaded_file.id, current_user.id, db)
+        if report:
+            report.status = "failed"
+            report.error_message = str(exc)
+            db.commit()
+            db.refresh(report)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Report generation failed: {exc}",
+        ) from exc
+
+    return _serialize_file_report(report)
+
+
+@router.post("/{file_id}/chat", response_model=FileChatResponse)
+def chat_with_uploaded_file(
+    file_id: int,
+    payload: FileChatRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    uploaded_file = db.get(UploadedFile, file_id)
+
+    if uploaded_file is None or uploaded_file.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Uploaded file was not found.",
+        )
+
+    if uploaded_file.status != "ready":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is not ready for chat.",
+        )
+
+    if not uploaded_file.duckdb_table_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file does not have a query table yet.",
+        )
+
+    try:
+        return generate_file_chat_response(uploaded_file, payload.message)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI chat failed: {exc}",
+        ) from exc
+
+
 @router.post("/{file_id}/query", response_model=FileQueryResponse)
 def query_uploaded_file(
     file_id: int,
@@ -242,3 +364,56 @@ def query_uploaded_file(
 
     columns = list(rows[0].keys()) if rows else []
     return FileQueryResponse(columns=columns, rows=rows, limit=payload.limit)
+
+
+def _get_ready_owned_file(
+    file_id: int,
+    user_id: int,
+    db: Session,
+    action_name: str,
+) -> UploadedFile:
+    uploaded_file = db.get(UploadedFile, file_id)
+
+    if uploaded_file is None or uploaded_file.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Uploaded file was not found.",
+        )
+
+    if uploaded_file.status != "ready":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Uploaded file is not ready for {action_name}.",
+        )
+
+    if not uploaded_file.duckdb_table_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file does not have a query table yet.",
+        )
+
+    return uploaded_file
+
+
+def _get_report_for_file(file_id: int, user_id: int, db: Session) -> FileReport | None:
+    return (
+        db.query(FileReport)
+        .filter(
+            FileReport.file_id == file_id,
+            FileReport.user_id == user_id,
+        )
+        .one_or_none()
+    )
+
+
+def _serialize_file_report(report: FileReport) -> dict:
+    return {
+        "id": report.id,
+        "fileId": report.file_id,
+        "status": report.status,
+        "report": report.report_json,
+        "model": report.model,
+        "errorMessage": report.error_message,
+        "createdAt": report.created_at,
+        "updatedAt": report.updated_at,
+    }

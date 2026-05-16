@@ -1,15 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BarChart3, Bot, FileText, Send, Table2, TerminalSquare } from "lucide-react";
 
-import { authRequest, type ApiFilePreview, type ApiFileQueryResult } from "@/lib/api";
+import {
+  authRequest,
+  type ApiFileChatResponse,
+  type ApiFilePreview,
+  type ApiFileQueryResult,
+  type ApiFileReportResponse,
+} from "@/lib/api";
 
 type WorkspaceTab = "sql" | "report" | "charts";
 
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  isLoading?: boolean;
 };
 
 type FileWorkspaceProps = {
@@ -49,13 +56,62 @@ export function FileWorkspace({ preview }: FileWorkspaceProps) {
   const [resultRows, setResultRows] = useState(preview.rows);
   const [queryError, setQueryError] = useState("");
   const [isRunning, setIsRunning] = useState(false);
+  const [isChatSending, setIsChatSending] = useState(false);
+  const [report, setReport] = useState<ApiFileReportResponse | null>(null);
+  const [reportError, setReportError] = useState("");
+  const [hasLoadedReport, setHasLoadedReport] = useState(false);
+  const [isReportLoading, setIsReportLoading] = useState(false);
+  const [isReportGenerating, setIsReportGenerating] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      content: "Ask me about this sheet. The AI endpoint will be connected next.",
+      content: "Ask me about this sheet, or ask me to draft SQL for the current file.",
     },
   ]);
+
+  const loadReport = useCallback(async () => {
+    setReportError("");
+    setIsReportLoading(true);
+
+    try {
+      const payload = await authRequest<ApiFileReportResponse | null>(
+        `/api/files/${preview.file.id}/report`,
+      );
+      setReport(payload);
+      setHasLoadedReport(true);
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : "Could not load the report.");
+    } finally {
+      setIsReportLoading(false);
+    }
+  }, [preview.file.id]);
+
+  useEffect(() => {
+    if (activeTab === "report" && !hasLoadedReport && !isReportLoading) {
+      loadReport();
+    }
+  }, [activeTab, hasLoadedReport, isReportLoading, loadReport]);
+
+  async function generateReport() {
+    setReportError("");
+    setIsReportGenerating(true);
+
+    try {
+      const payload = await authRequest<ApiFileReportResponse>(
+        `/api/files/${preview.file.id}/report`,
+        {
+          method: "POST",
+        },
+      );
+      setReport(payload);
+      setHasLoadedReport(true);
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : "Could not generate the report.");
+    } finally {
+      setIsReportGenerating(false);
+    }
+  }
 
   async function runQuery() {
     setQueryError("");
@@ -85,21 +141,64 @@ export function FileWorkspace({ preview }: FileWorkspaceProps) {
     }
   }
 
-  function sendChatMessage() {
+  async function sendChatMessage() {
     const trimmedInput = chatInput.trim();
-    if (!trimmedInput) {
+    if (!trimmedInput || isChatSending) {
       return;
     }
 
     setMessages((currentMessages) => [
       ...currentMessages,
       { role: "user", content: trimmedInput },
-      {
-        role: "assistant",
-        content: "AI chat is ready in the interface; the backend answer endpoint comes next.",
-      },
+      { role: "assistant", content: "Thinking...", isLoading: true },
     ]);
     setChatInput("");
+    setIsChatSending(true);
+
+    try {
+      const payload = await authRequest<ApiFileChatResponse>(
+        `/api/files/${preview.file.id}/chat`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            message: trimmedInput,
+          }),
+        },
+      );
+      const content =
+        payload.operation === "sql" && payload.sql
+          ? `${payload.answer ?? "I drafted a safe read-only query for this file."}\n\n${payload.sql}`
+          : payload.answer ?? "I can only answer questions about this file.";
+
+      if (payload.sql) {
+        setQuery(payload.sql);
+        setActiveTab("sql");
+      }
+
+      setMessages((currentMessages) =>
+        currentMessages.map((message, index) =>
+          index === currentMessages.length - 1 && message.isLoading
+            ? {
+                role: "assistant",
+                content,
+              }
+            : message,
+        ),
+      );
+    } catch (err) {
+      setMessages((currentMessages) =>
+        currentMessages.map((message, index) =>
+          index === currentMessages.length - 1 && message.isLoading
+            ? {
+                role: "assistant",
+                content: err instanceof Error ? err.message : "AI chat failed. Please try again.",
+              }
+            : message,
+        ),
+      );
+    } finally {
+      setIsChatSending(false);
+    }
   }
 
   return (
@@ -181,12 +280,18 @@ export function FileWorkspace({ preview }: FileWorkspaceProps) {
             ) : null}
             <ResultTable columns={resultColumns} rows={resultRows} />
           </div>
+        ) : activeTab === "report" ? (
+          <ReportTab
+            report={report}
+            error={reportError}
+            isLoading={isReportLoading}
+            isGenerating={isReportGenerating}
+            onGenerate={generateReport}
+          />
         ) : (
           <div className="grid min-h-[28rem] place-items-center p-8 text-center">
             <div>
-              <p className="text-lg font-semibold text-[#1f2937]">
-                {activeTab === "report" ? "Report builder" : "Chart workspace"}
-              </p>
+              <p className="text-lg font-semibold text-[#1f2937]">Chart workspace</p>
               <p className="mt-2 max-w-md text-sm leading-6 text-[#62584e]">
                 This tab is reserved for the next pass. The file data is ready in DuckDB.
               </p>
@@ -211,33 +316,46 @@ export function FileWorkspace({ preview }: FileWorkspaceProps) {
           {messages.map((message, index) => (
             <div
               key={`${message.role}-${index}`}
-              className={`rounded-xl px-3 py-2 text-sm leading-6 ${
+              className={`whitespace-pre-wrap rounded-xl px-3 py-2 text-sm leading-6 ${
                 message.role === "assistant"
                   ? "bg-[#f7f1e8] text-[#62584e]"
                   : "bg-[#1f2937] text-[#fbfaf7]"
               }`}
             >
-              {message.content}
+              {message.isLoading ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#8f8375]" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#8f8375] [animation-delay:120ms]" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#8f8375] [animation-delay:240ms]" />
+                  <span className="ml-1">Thinking...</span>
+                </span>
+              ) : (
+                message.content
+              )}
             </div>
           ))}
         </div>
         <div className="border-t border-[#e8dfd2] p-4">
-          <div className="flex gap-2">
-            <input
+          <div className="flex items-end gap-2">
+            <textarea
               value={chatInput}
               onChange={(event) => setChatInput(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter") {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
                   sendChatMessage();
                 }
               }}
-              className="min-w-0 flex-1 rounded-lg border border-[#ded7cc] bg-[#fffdf8] px-3 text-sm text-[#292524] outline-none placeholder:text-[#9a9186] focus:border-[#8f8375]"
+              disabled={isChatSending}
+              rows={3}
+              className="thin-scrollbar h-24 min-w-0 flex-1 resize-none rounded-lg border border-[#ded7cc] bg-[#fffdf8] px-3 py-2 text-sm leading-5 text-[#292524] outline-none placeholder:text-[#9a9186] focus:border-[#8f8375] disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="Ask about rows, trends, or columns"
             />
             <button
               type="button"
               onClick={sendChatMessage}
-              className="grid h-10 w-10 place-items-center rounded-lg bg-[#1f2937] text-[#fbfaf7] hover:bg-[#111827]"
+              disabled={isChatSending}
+              className="grid h-10 w-10 place-items-center rounded-lg bg-[#1f2937] text-[#fbfaf7] hover:bg-[#111827] disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Send message"
             >
               <Send className="h-4 w-4" strokeWidth={1.8} />
@@ -245,6 +363,102 @@ export function FileWorkspace({ preview }: FileWorkspaceProps) {
           </div>
         </div>
       </aside>
+    </div>
+  );
+}
+
+function ReportTab({
+  report,
+  error,
+  isLoading,
+  isGenerating,
+  onGenerate,
+}: {
+  report: ApiFileReportResponse | null;
+  error: string;
+  isLoading: boolean;
+  isGenerating: boolean;
+  onGenerate: () => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="grid min-h-[28rem] place-items-center p-8 text-center">
+        <div>
+          <div className="mx-auto h-8 w-8 animate-pulse rounded-lg bg-[#d6b65f]" />
+          <p className="mt-4 text-sm font-semibold text-[#1f2937]">Loading report...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!report?.report) {
+    return (
+      <div className="grid min-h-[28rem] place-items-center p-8 text-center">
+        <div className="max-w-md">
+          <div className="mx-auto grid h-11 w-11 place-items-center rounded-lg bg-[#1f2937] text-[#fbfaf7]">
+            <FileText className="h-5 w-5" strokeWidth={1.8} />
+          </div>
+          <p className="mt-4 text-lg font-semibold text-[#1f2937]">No report generated yet.</p>
+          <p className="mt-2 text-sm leading-6 text-[#62584e]">
+            Generate a stored report from this file&apos;s metadata and 50 sample rows. Future
+            visits will load the saved report from the database.
+          </p>
+          {error ? (
+            <p className="mt-4 rounded-lg border border-[#f0c7c2] bg-[#fff4f2] px-3 py-2 text-sm font-medium text-[#9f2f2d]">
+              {error}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={isGenerating}
+            className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-[#1f2937] px-4 text-sm font-semibold text-[#fbfaf7] hover:bg-[#111827] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <FileText className="h-4 w-4" strokeWidth={1.8} />
+            {isGenerating ? "Generating..." : "Generate report"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const limitations = report.report.sections.find(
+    (section) => section.title.trim().toLowerCase() === "limitations",
+  );
+  const sections = report.report.sections.filter(
+    (section) => section.title.trim().toLowerCase() !== "limitations",
+  );
+
+  return (
+    <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto p-5">
+      <div className="border-b border-[#e8dfd2] pb-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#7c6f5b]">
+          Stored report
+        </p>
+        <h2 className="mt-2 text-2xl font-semibold text-[#1f2937]">{report.report.title}</h2>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-[#62584e]">
+          {report.report.executiveSummary}
+        </p>
+      </div>
+
+      <div className="mt-5 grid gap-4">
+        {sections.map((section) => (
+          <section key={section.title} className="border-b border-[#ede5d8] pb-4 last:border-0">
+            <h3 className="text-sm font-semibold text-[#1f2937]">{section.title}</h3>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#62584e]">
+              {section.content}
+            </p>
+          </section>
+        ))}
+        {limitations ? (
+          <section className="rounded-lg border border-[#ded7cc] bg-[#f7f1e8] p-4">
+            <h3 className="text-sm font-semibold text-[#1f2937]">{limitations.title}</h3>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#62584e]">
+              {limitations.content}
+            </p>
+          </section>
+        ) : null}
+      </div>
     </div>
   );
 }

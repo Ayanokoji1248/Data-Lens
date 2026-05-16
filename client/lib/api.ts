@@ -70,6 +70,44 @@ export type ApiFileQueryResult = {
   limit: number;
 };
 
+export type ApiFileChatResponse = {
+  answer: string | null;
+  sql: string | null;
+  operation: "answer" | "sql";
+  summary: {
+    filename: string;
+    sheetNames: string[];
+    rowCount: number;
+    columnCount: number;
+    columns: Array<{
+      originalName: string;
+      storedName: string;
+      position: number;
+      inferredType?: string;
+      nullCount?: number;
+      sampleValues?: unknown[];
+    }>;
+  };
+};
+
+export type ApiFileReportResponse = {
+  id: number;
+  fileId: number;
+  status: string;
+  report: {
+    title: string;
+    executiveSummary: string;
+    sections: Array<{
+      title: string;
+      content: string;
+    }>;
+  } | null;
+  model: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export async function authRequest<T>(
   path: string,
   options: RequestInit = {},

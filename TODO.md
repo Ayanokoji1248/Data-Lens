@@ -1,35 +1,20 @@
 # KnowYourSheet Development TODO
 
-This file tracks the next implementation path after authenticated file upload.
+This file tracks the current implementation state and the next development path.
 
-## Current State
+## Already Completed
 
-- Auth is working with cookie-based sessions.
-- Dashboard has a file picker.
-- `POST /api/files/upload` accepts `.csv`, `.xls`, and `.xlsx`.
-- Upload endpoint currently validates the file and returns queued metadata, but does not persist or process the file yet.
+### Phase 1: Storage Architecture
 
-## Phase 1: Decide Storage Architecture
+- [x] Chosen architecture:
+  - Postgres for users, auth, file metadata, ownership, and processing status.
+  - DuckDB for parsed spreadsheet/tabular data and analytical queries.
+  - Local `server/uploads` storage for raw uploaded files during development.
 
-- [ ] Decide where parsed spreadsheet data should live:
-  - Option A: DuckDB for analytical querying over uploaded tabular data.
-  - Option B: Postgres tables for structured relational storage.
-  - Option C: Hybrid, Postgres for app records and DuckDB for analytical sheet data.
-- [ ] Decide where file metadata should live:
-  - Option A: Postgres, recommended for now because users/auth already use SQLAlchemy.
-  - Option B: MongoDB if flexible metadata grows quickly.
-- [ ] Pick a first implementation path.
+### Phase 2: File Metadata Model
 
-Recommended first path:
-
-- Postgres for file metadata.
-- DuckDB for parsed sheet/tabular data.
-- Store uploaded raw files on local disk during development.
-
-## Phase 2: File Metadata Model
-
-- [ ] Create a `files` or `uploaded_files` table.
-- [ ] Store:
+- [x] Added `uploaded_files` SQLAlchemy model.
+- [x] Stored:
   - `id`
   - `user_id`
   - `original_filename`
@@ -37,143 +22,193 @@ Recommended first path:
   - `content_type`
   - `size_bytes`
   - `extension`
-  - `status` (`queued`, `processing`, `ready`, `failed`)
+  - `status`
   - `storage_path`
+  - `duckdb_table_name`
+  - `columns_metadata`
   - `row_count`
   - `column_count`
   - `sheet_count`
   - `error_message`
   - `created_at`
   - `updated_at`
-- [ ] Add SQLAlchemy model.
-- [ ] Add Pydantic response schema.
-- [ ] Return persisted metadata from `POST /api/files/upload`.
+- [x] Added Pydantic response schemas.
+- [x] `POST /api/files/upload` returns persisted metadata.
 
-## Phase 3: Raw File Storage
+### Phase 3: Raw File Storage
 
-- [ ] Create a server upload directory, for example `server/uploads`.
-- [ ] Save uploaded file with a generated safe filename.
-- [ ] Keep the original filename only as metadata.
-- [ ] Enforce file size limit.
-- [ ] Reject unsupported file extensions.
-- [ ] Reject empty files.
-- [ ] Make upload path configurable through `.env`.
+- [x] Created local upload storage under `server/uploads`.
+- [x] Saved uploaded files with generated safe filenames.
+- [x] Kept original filename only as metadata.
+- [x] Enforced file size limit.
+- [x] Rejected unsupported extensions.
+- [x] Rejected empty files.
+- [x] Made upload path configurable through settings.
 
-## Phase 4: Parse Uploaded Files
+### Phase 4: Parse Uploaded Files
 
-- [ ] Add parsing dependencies:
-  - CSV: built-in Python `csv` or `pandas`.
-  - Excel: `openpyxl` or `pandas`.
-- [ ] Parse CSV files.
-- [ ] Parse XLSX files.
-- [ ] Decide whether legacy `.xls` is supported immediately or later.
-- [ ] Extract:
+- [x] Added CSV parsing using Python `csv`.
+- [x] Added XLSX parsing using `openpyxl`.
+- [x] Extracted:
   - column names
+  - sanitized DuckDB column names
   - inferred data types
   - row count
+  - column count
   - null/missing value counts
-  - sample rows
+  - sample values
   - sheet names for Excel files
-- [ ] Update file metadata after parsing.
+- [x] Updated file metadata after parsing.
+- [x] `.xls` is accepted as raw upload but marked failed/unsupported for parsing.
 
-## Phase 5: Store Parsed Data
+### Phase 5: Store Parsed Data
 
-DuckDB path:
+- [x] Added DuckDB dependency.
+- [x] Created local `data_lens.duckdb` development database.
+- [x] Created one DuckDB table per uploaded file.
+- [x] Stored parsed rows in DuckDB.
+- [x] Stored mapping from `uploaded_files.id` to DuckDB table name in Postgres.
+- [x] Added cleanup behavior for failed DuckDB processing.
 
-- [ ] Add DuckDB dependency.
-- [ ] Create one DuckDB database file for development.
-- [ ] Create a table per uploaded file or normalized naming strategy.
-- [ ] Store parsed rows in DuckDB.
-- [ ] Store mapping from `uploaded_file.id` to DuckDB table name in Postgres.
-- [ ] Add cleanup behavior if upload processing fails.
+### Phase 6: Query API
 
-Postgres path:
+- [x] Added `GET /api/files/{file_id}/preview`.
+- [x] Added `POST /api/files/{file_id}/query`.
+- [x] Enforced ownership checks.
+- [x] Used safe `current_file` alias for querying the selected file.
+- [x] Added read-only SQL validation.
+- [x] Added query result row limits.
 
-- [ ] Design dynamic table strategy or generic cell/row storage.
-- [ ] Evaluate performance for larger spreadsheets.
-- [ ] Avoid creating unsafe table names from user filenames.
+### Phase 9: Frontend Integration
 
-## Phase 6: Query API
+- [x] Dashboard shows real uploaded file state.
+- [x] Recent files load from backend.
+- [x] My Sheets loads from backend.
+- [x] Added file detail page at `/dashboard/my-sheets/{file_id}`.
+- [x] Added SQL editor tab for selected file.
+- [x] Added query output table.
+- [x] Added placeholder Report and Charts tabs.
+- [x] Added placeholder AI chat panel.
+- [x] Added loading/error handling for file API calls.
 
-- [ ] Create `POST /api/files/{file_id}/query`.
-- [ ] Accept a natural-language or structured query payload.
-- [ ] Start with simple structured operations:
-  - list columns
-  - preview rows
-  - count rows
-  - missing values by column
-  - basic grouping and sorting
-- [ ] Return query results in a consistent response shape.
-- [ ] Enforce ownership: users can only query their own files.
+## Next Combined TODO
 
-## Phase 7: AI Query Layer
+### 1. AI Query Layer
 
-- [ ] Decide AI provider and SDK.
-- [ ] Create a schema/context builder from uploaded file metadata:
-  - file name
+- [x] Choose AI provider and SDK.
+  - Google Gemini through `google-genai`.
+- [x] Add backend chat endpoint:
+  - `POST /api/files/{file_id}/chat`
+- [x] Build file context from:
+  - filename
   - sheet names
   - columns
   - inferred types
   - sample rows
+  - row/column counts
   - data quality summary
-- [ ] Convert user questions into safe SQL or analytical operations.
-- [ ] Add guardrails:
+- [x] Convert user questions into safe SQL or analytical operations.
+- [x] Reuse existing SQL guardrails:
+  - ownership checks
   - read-only queries
+  - `current_file` alias
   - row limits
-  - timeout handling
   - SQL validation
-- [ ] Return:
+- [x] Return:
   - direct answer
-  - supporting rows or summary
-  - generated query or operation
+  - generated SQL or operation
+  - supporting summary
+- [x] Keep chat v1 SQL-only for computed questions.
+  - The chat endpoint validates generated SQL but does not execute it.
+  - Users can copy/run generated SQL from the existing editor.
 
-## Phase 8: AI Report Generation
+### 2. AI Chat Frontend
 
-- [ ] Create `POST /api/files/{file_id}/report`.
-- [ ] Generate a report with:
+- [x] Connect right-side chat panel to backend.
+- [x] Show loading state while AI answers.
+- [x] Show assistant and user message history.
+- [x] Show generated SQL under answer when useful.
+- [x] Show safe error state when AI/query fails.
+- [x] Use fixed-height textarea composer for chat input.
+
+### 3. Report Tab
+
+- [x] Add backend report endpoint:
+  - `POST /api/files/{file_id}/report`
+- [x] Add stored report fetch endpoint:
+  - `GET /api/files/{file_id}/report`
+- [x] Store generated reports in the database.
+- [x] Generate:
   - executive summary
-  - key trends
-  - data quality issues
+  - report sections
   - missing values
-  - outliers
-  - suggested follow-up questions
-- [ ] Store generated reports or regenerate on demand.
-- [ ] Add report UI on dashboard or file detail page.
+  - data quality issues
+  - limitations
+- [x] Decide whether reports are stored or regenerated on demand.
+  - Reports are stored in `file_reports` and reused after the first generation.
+- [x] Render report inside the existing Report tab.
+- [x] Use metadata plus 50 sample rows as report context.
+  - Sample rows are context only and not treated as statistically representative.
 
-## Phase 9: Frontend Integration
+### 4. Charts Tab
 
-- [ ] After upload, show real file status instead of empty state.
-- [ ] Add recent files from backend.
-- [ ] Add My Sheets list from backend.
-- [ ] Add file detail page.
-- [ ] Add query/chat UI for selected file.
-- [ ] Add loading, success, and failure states.
+- [ ] Add chart UI using parsed DuckDB data.
+- [ ] Start with:
+  - bar chart
+  - line chart
+  - pie/donut chart
+  - histogram
+- [ ] Let user choose columns and aggregation.
+- [ ] Later allow AI to suggest charts.
+
+### 5. Query API Improvements
+
+- [ ] Return column metadata even when a query returns zero rows.
+- [ ] Add query history.
+- [ ] Add saved queries.
+- [ ] Improve SQL validation with a proper SQL parser eventually.
+- [ ] Add timeout handling for long queries.
+
+### 6. Frontend Polish
+
+- [ ] Add stronger loading states on My Sheets and detail page.
+- [ ] Improve failed/processing file states.
 - [ ] Add retry action for failed processing.
+- [ ] Add schema/columns sidebar near SQL editor.
+- [ ] Improve responsive layout for small laptop screens and wide desktop screens.
 
-## Phase 10: Background Processing
+### 7. Background Processing
 
-- [ ] Decide whether processing happens during upload request or background task.
-- [ ] For development, synchronous processing may be acceptable.
-- [ ] For production, use a background worker:
-  - Celery/RQ/Arq
-  - FastAPI background tasks for a simple first version
-- [ ] Track processing status in metadata table.
+- [ ] Move parsing out of the upload request eventually.
+- [ ] Use FastAPI background tasks as the first simple approach.
+- [ ] Later evaluate Celery/RQ/Arq for production workers.
+- [ ] Keep status tracking in `uploaded_files`.
 
-## Phase 11: Testing
+### 8. Testing
 
 - [ ] Unit test file extension validation.
 - [ ] Unit test upload metadata creation.
 - [ ] Unit test CSV parsing.
 - [ ] Unit test XLSX parsing.
+- [ ] Unit test DuckDB table creation.
 - [ ] Test auth ownership checks.
-- [ ] Test query endpoint with a known CSV.
+- [ ] Test query endpoint safety.
 - [ ] Test frontend upload success and error states.
+- [ ] Test My Sheets list rendering.
+- [ ] Test file detail preview rendering.
+- [ ] Test SQL query interaction.
 
-## Near-Term Next Step
+### 9. Production Storage
 
-Implement Phase 2 and Phase 3 first:
+- [ ] Keep local `server/uploads` for development.
+- [ ] Later move raw files to object storage:
+  - AWS S3
+  - Cloudflare R2
+  - Supabase Storage
+  - Google Cloud Storage
+  - Azure Blob Storage
+- [ ] Keep Postgres metadata and DuckDB/query layer separate.
 
-1. Add Postgres metadata model for uploaded files.
-2. Save raw uploaded files to disk.
-3. Return persisted file metadata from `/api/files/upload`.
+## Recommended Next Step
 
+Build the AI Query Layer and connect the existing AI chat panel, because uploads, parsing, DuckDB storage, preview, and safe SQL querying are already working.
