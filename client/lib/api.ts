@@ -108,6 +108,30 @@ export type ApiFileReportResponse = {
   updatedAt: string;
 };
 
+export type ApiChartType = "bar" | "donut" | "line" | "histogram";
+
+export type ApiChartSuggestion = {
+  title: string;
+  chartType: ApiChartType;
+  dimension: string;
+  measure: string | null;
+  aggregation: "count" | "sum" | "avg" | "min" | "max";
+  limit: number;
+};
+
+export type ApiChartSuggestionsResponse = {
+  suggestions: ApiChartSuggestion[];
+};
+
+export type ApiChartQueryResponse = {
+  title: string;
+  chartType: ApiChartType;
+  data: Array<{
+    label: string;
+    value: number;
+  }>;
+};
+
 export async function authRequest<T>(
   path: string,
   options: RequestInit = {},

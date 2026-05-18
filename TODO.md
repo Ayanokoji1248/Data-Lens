@@ -152,13 +152,18 @@ This file tracks the current implementation state and the next development path.
 
 ### 4. Charts Tab
 
-- [ ] Add chart UI using parsed DuckDB data.
-- [ ] Start with:
+- [x] Add chart UI using parsed DuckDB data.
+- [x] Add backend chart suggestion endpoint:
+  - `GET /api/files/{file_id}/charts/suggestions`
+- [x] Add backend structured chart query endpoint:
+  - `POST /api/files/{file_id}/charts/query`
+- [x] Start with:
   - bar chart
   - line chart
   - pie/donut chart
   - histogram
-- [ ] Let user choose columns and aggregation.
+- [x] Generate deterministic chart suggestions from column metadata.
+- [ ] Let user manually choose columns and aggregation.
 - [ ] Later allow AI to suggest charts.
 
 ### 5. Query API Improvements

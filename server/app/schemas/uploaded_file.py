@@ -111,3 +111,47 @@ class FileReportResponse(BaseModel):
     updated_at: datetime = Field(alias="updatedAt")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+ChartType = Literal["bar", "donut", "line", "histogram"]
+ChartAggregation = Literal["count", "sum", "avg", "min", "max"]
+
+
+class FileChartSuggestion(BaseModel):
+    title: str
+    chart_type: ChartType = Field(alias="chartType")
+    dimension: str
+    measure: str | None = None
+    aggregation: ChartAggregation
+    limit: int = Field(default=20, ge=1, le=50)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FileChartSuggestionsResponse(BaseModel):
+    suggestions: list[FileChartSuggestion]
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FileChartQueryRequest(BaseModel):
+    chart_type: ChartType = Field(alias="chartType")
+    dimension: str
+    measure: str | None = None
+    aggregation: ChartAggregation = "count"
+    limit: int = Field(default=20, ge=1, le=50)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class FileChartDataPoint(BaseModel):
+    label: str
+    value: float | int
+
+
+class FileChartQueryResponse(BaseModel):
+    title: str
+    chart_type: ChartType = Field(alias="chartType")
+    data: list[FileChartDataPoint]
+
+    model_config = ConfigDict(populate_by_name=True)

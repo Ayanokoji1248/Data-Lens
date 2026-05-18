@@ -2,8 +2,25 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { BarChart3, Bot, FileText, Send, Table2, TerminalSquare } from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import {
+  type ApiChartQueryResponse,
+  type ApiChartSuggestion,
+  type ApiChartSuggestionsResponse,
   authRequest,
   type ApiFileChatResponse,
   type ApiFilePreview,
@@ -62,6 +79,12 @@ export function FileWorkspace({ preview }: FileWorkspaceProps) {
   const [hasLoadedReport, setHasLoadedReport] = useState(false);
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [isReportGenerating, setIsReportGenerating] = useState(false);
+  const [chartSuggestions, setChartSuggestions] = useState<ApiChartSuggestion[]>([]);
+  const [selectedChart, setSelectedChart] = useState<ApiChartQueryResponse | null>(null);
+  const [chartError, setChartError] = useState("");
+  const [hasLoadedCharts, setHasLoadedCharts] = useState(false);
+  const [isChartsLoading, setIsChartsLoading] = useState(false);
+  const [isChartRunning, setIsChartRunning] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -92,6 +115,49 @@ export function FileWorkspace({ preview }: FileWorkspaceProps) {
       loadReport();
     }
   }, [activeTab, hasLoadedReport, isReportLoading, loadReport]);
+
+  const loadChartSuggestions = useCallback(async () => {
+    setChartError("");
+    setIsChartsLoading(true);
+
+    try {
+      const payload = await authRequest<ApiChartSuggestionsResponse>(
+        `/api/files/${preview.file.id}/charts/suggestions`,
+      );
+      setChartSuggestions(payload.suggestions);
+      setHasLoadedCharts(true);
+    } catch (err) {
+      setChartError(err instanceof Error ? err.message : "Could not load chart suggestions.");
+    } finally {
+      setIsChartsLoading(false);
+    }
+  }, [preview.file.id]);
+
+  useEffect(() => {
+    if (activeTab === "charts" && !hasLoadedCharts && !isChartsLoading) {
+      loadChartSuggestions();
+    }
+  }, [activeTab, hasLoadedCharts, isChartsLoading, loadChartSuggestions]);
+
+  async function runChartSuggestion(suggestion: ApiChartSuggestion) {
+    setChartError("");
+    setIsChartRunning(true);
+
+    try {
+      const payload = await authRequest<ApiChartQueryResponse>(
+        `/api/files/${preview.file.id}/charts/query`,
+        {
+          method: "POST",
+          body: JSON.stringify(suggestion),
+        },
+      );
+      setSelectedChart(payload);
+    } catch (err) {
+      setChartError(err instanceof Error ? err.message : "Could not render this chart.");
+    } finally {
+      setIsChartRunning(false);
+    }
+  }
 
   async function generateReport() {
     setReportError("");
@@ -289,14 +355,14 @@ export function FileWorkspace({ preview }: FileWorkspaceProps) {
             onGenerate={generateReport}
           />
         ) : (
-          <div className="grid min-h-[28rem] place-items-center p-8 text-center">
-            <div>
-              <p className="text-lg font-semibold text-[#1f2937]">Chart workspace</p>
-              <p className="mt-2 max-w-md text-sm leading-6 text-[#62584e]">
-                This tab is reserved for the next pass. The file data is ready in DuckDB.
-              </p>
-            </div>
-          </div>
+          <ChartsTab
+            suggestions={chartSuggestions}
+            selectedChart={selectedChart}
+            error={chartError}
+            isLoading={isChartsLoading}
+            isRunning={isChartRunning}
+            onSelect={runChartSuggestion}
+          />
         )}
       </section>
 
@@ -366,6 +432,160 @@ export function FileWorkspace({ preview }: FileWorkspaceProps) {
     </div>
   );
 }
+
+function ChartsTab({
+  suggestions,
+  selectedChart,
+  error,
+  isLoading,
+  isRunning,
+  onSelect,
+}: {
+  suggestions: ApiChartSuggestion[];
+  selectedChart: ApiChartQueryResponse | null;
+  error: string;
+  isLoading: boolean;
+  isRunning: boolean;
+  onSelect: (suggestion: ApiChartSuggestion) => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="grid min-h-[28rem] place-items-center p-8 text-center">
+        <div>
+          <div className="mx-auto h-8 w-8 animate-pulse rounded-lg bg-[#6e9f72]" />
+          <p className="mt-4 text-sm font-semibold text-[#1f2937]">Finding useful charts...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <aside className="border-b border-[#e8dfd2] p-4 lg:border-b-0 lg:border-r">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#7c6f5b]">
+          Suggestions
+        </p>
+        <div className="mt-3 grid gap-2">
+          {suggestions.map((suggestion) => (
+            <button
+              key={`${suggestion.chartType}-${suggestion.dimension}-${suggestion.title}`}
+              type="button"
+              onClick={() => onSelect(suggestion)}
+              disabled={isRunning}
+              className="rounded-lg border border-[#ded7cc] bg-[#fffdf8] p-3 text-left hover:border-[#8f8375] hover:bg-[#f7f1e8] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span className="block text-sm font-semibold text-[#1f2937]">{suggestion.title}</span>
+              <span className="mt-1 block text-xs uppercase tracking-[0.12em] text-[#7c6f5b]">
+                {suggestion.chartType} / {suggestion.aggregation}
+              </span>
+            </button>
+          ))}
+        </div>
+        {suggestions.length === 0 ? (
+          <p className="mt-4 text-sm leading-6 text-[#62584e]">
+            No chart suggestions are available for this file yet.
+          </p>
+        ) : null}
+        {error ? (
+          <p className="mt-4 rounded-lg border border-[#f0c7c2] bg-[#fff4f2] px-3 py-2 text-sm font-medium text-[#9f2f2d]">
+            {error}
+          </p>
+        ) : null}
+      </aside>
+
+      <div className="min-h-[28rem] p-5">
+        {selectedChart ? (
+          <div className="flex h-full min-h-[26rem] flex-col">
+            <div className="flex items-center justify-between gap-3 border-b border-[#e8dfd2] pb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#7c6f5b]">
+                  {selectedChart.chartType}
+                </p>
+                <h2 className="mt-1 text-xl font-semibold text-[#1f2937]">
+                  {selectedChart.title}
+                </h2>
+              </div>
+              <span className="rounded-lg bg-[#f7f1e8] px-3 py-1 text-xs font-semibold text-[#62584e]">
+                {selectedChart.data.length} points
+              </span>
+            </div>
+            <div className="mt-5 min-h-0 flex-1">
+              <ChartRenderer chart={selectedChart} />
+            </div>
+          </div>
+        ) : (
+          <div className="grid h-full min-h-[28rem] place-items-center text-center">
+            <div className="max-w-md">
+              <div className="mx-auto grid h-11 w-11 place-items-center rounded-lg bg-[#1f2937] text-[#fbfaf7]">
+                <BarChart3 className="h-5 w-5" strokeWidth={1.8} />
+              </div>
+              <p className="mt-4 text-lg font-semibold text-[#1f2937]">Choose a chart.</p>
+              <p className="mt-2 text-sm leading-6 text-[#62584e]">
+                Suggestions are generated from column types and rendered from safe DuckDB queries.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChartRenderer({ chart }: { chart: ApiChartQueryResponse }) {
+  if (chart.data.length === 0) {
+    return <p className="text-sm text-[#78716c]">No chart data returned.</p>;
+  }
+
+  if (chart.chartType === "donut") {
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Tooltip />
+          <Pie
+            data={chart.data}
+            dataKey="value"
+            nameKey="label"
+            innerRadius="52%"
+            outerRadius="78%"
+            paddingAngle={2}
+          >
+            {chart.data.map((entry, index) => (
+              <Cell key={entry.label} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+            ))}
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  if (chart.chartType === "line") {
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={chart.data} margin={{ top: 12, right: 18, bottom: 12, left: 0 }}>
+          <CartesianGrid stroke="#ede5d8" vertical={false} />
+          <XAxis dataKey="label" tick={{ fill: "#62584e", fontSize: 12 }} />
+          <YAxis tick={{ fill: "#62584e", fontSize: 12 }} />
+          <Tooltip />
+          <Line type="monotone" dataKey="value" stroke="#1f2937" strokeWidth={2.4} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={chart.data} margin={{ top: 12, right: 18, bottom: 12, left: 0 }}>
+        <CartesianGrid stroke="#ede5d8" vertical={false} />
+        <XAxis dataKey="label" tick={{ fill: "#62584e", fontSize: 12 }} />
+        <YAxis tick={{ fill: "#62584e", fontSize: 12 }} />
+        <Tooltip />
+        <Bar dataKey="value" fill="#6e9f72" radius={[6, 6, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+const CHART_COLORS = ["#1f2937", "#6e9f72", "#d6b65f", "#d96b5f", "#7c6f5b", "#8f8375"];
 
 function ReportTab({
   report,

@@ -10,6 +10,9 @@ from app.db.session import get_db
 from app.models.file_report import FileReport
 from app.models.uploaded_file import UploadedFile
 from app.schemas.uploaded_file import (
+    FileChartQueryRequest,
+    FileChartQueryResponse,
+    FileChartSuggestionsResponse,
     FileChatRequest,
     FileChatResponse,
     FilePreviewResponse,
@@ -21,6 +24,7 @@ from app.schemas.uploaded_file import (
 )
 from app.services.auth_service import get_current_user
 from app.services.ai_query_service import generate_file_chat_response
+from app.services.chart_service import build_chart_suggestions, run_chart_query
 from app.services.duckdb_service import drop_table_by_name, preview_rows, run_read_query, store_rows
 from app.services.file_report_service import generate_file_report
 from app.services.spreadsheet_parser import parse_spreadsheet
@@ -204,6 +208,39 @@ def preview_uploaded_file(
         rows=rows,
         limit=safe_limit,
     )
+
+
+@router.get("/{file_id}/charts/suggestions", response_model=FileChartSuggestionsResponse)
+def get_chart_suggestions(
+    file_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    uploaded_file = _get_ready_owned_file(file_id, current_user.id, db, "charting")
+    return {"suggestions": build_chart_suggestions(uploaded_file)}
+
+
+@router.post("/{file_id}/charts/query", response_model=FileChartQueryResponse)
+def query_file_chart(
+    file_id: int,
+    payload: FileChartQueryRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    uploaded_file = _get_ready_owned_file(file_id, current_user.id, db, "charting")
+
+    try:
+        return run_chart_query(uploaded_file, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Chart query failed: {exc}",
+        ) from exc
 
 
 @router.get("/{file_id}/report", response_model=FileReportResponse | None)
